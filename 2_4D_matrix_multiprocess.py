@@ -9,8 +9,9 @@ from multiprocessing import Pool, Manager
 import time
 
 
-def cal_task(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso):
+def cal_4D_task(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso):
     result = []
+    Id = []
     for i in range(len(intensity)):
         if hit[i][2] == 0:
             continue
@@ -37,14 +38,18 @@ def cal_task(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso):
         beam_angle_index = round(angle / beamangle_reso ) * beamangle_reso
         incident_index   = round(phi / incident_reso) * incident_reso
         result.append([deltaz_index, dist_index, beam_angle_index, incident_index, intensity[i]])
-    return result
+        Id.append(str([deltaz_index, dist_index, beam_angle_index, incident_index])) # Id for sorting with np.unique
+    return (result, Id)
 
 
 ''' Add result from multaprocess task '''
 data = []
-def add_list(result):
-    for ls in result:
-        data.append(ls)
+Id_unique = []
+def add_list(call_back_result):
+    (result, Id) = call_back_result
+    for i in range(len(result)):
+        data.append(result[i])
+        Id_unique.append(Id[i])
 
 
 ''' Import mesh and compute norm '''
@@ -62,9 +67,9 @@ beamangle_reso = 0.01
 incident_reso = 0.01
 
 # choose layer
-LAYER = 0 # 0:high 1:mid 2:low
+LAYER = 2 # 0:high 1:mid 2:low
 name = ['high','mid','low']
-meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]]
+meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11]]#,21,29,1,19,18,5,17]]
 
 # Init multiprocess list and pool
 p = Pool(8)
@@ -87,42 +92,53 @@ for index in meas_list[LAYER]:
         cols = int((bounds[1,0] - bounds[0,0])/mesh_reso)
         normal_vec = N[y*cols+x]
         # Add a task to the pool
-        p.apply_async(cal_task, args=(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso),callback = add_list) #.get() 
-        #with get, error in multiprocess can be reported, but all cores will wait until this process done, used only for debug
-        if i %100 == 0:
-            print("meas_img%d row %d/%d done" % (index, i, row))
-        
-        
+        p.apply_async(cal_4D_task, args=(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso),callback = add_list) #.get() 
+        # with get.(), error in multiprocess can be reported, but all cores will wait until this process done, used only for debug
 p.close()
 p.join()
 end = time.time()
 time0 = end-start
 data = np.array(data)
+Id_unique = np.array(Id_unique)
 print('step1 done, use time %f' % time0)
 print("num of points %d" % len(data))
 
+# for Debug
+# np.savetxt('/home/chs/Desktop/Sonar/Data/drape_result/data_'+name[LAYER]+'.csv', data, delimiter=',')
+# np.save('/home/chs/Desktop/Sonar/Data/drape_result/id.npy', Id_unique)
+# data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/data_low.csv"), delimiter=",")
+# Id_unique = np.load('/home/chs/Desktop/Sonar/Data/drape_result/id.npy')
 
-''' Outlier discard and average ''' 
-index = 0
-while index < len(data):
-    row = data[index]
-    if index % 1000 ==0:
-        print("row %d/%d done" % (index, len(data)))
-    key = np.where((data[:,0:4]==row[0:4]).all(1))[0]
-    value = data[key,4]
-    if len(key)==1:
-        index += 1
-        continue
-    # filtered average
-    mean = np.mean(value)
-    std = np.std(value, ddof = 1)
-    elem_list = filter(lambda x: abs((x-mean)/std) < 1.5, value)
-    data[index, 4] = np.mean(elem_list)
-    data = np.delete(data, key[1:],axis=0)
-    index += 1
-    if i %100 == 0:
-        print("average row %d/%d done" % (index, len(data)))
-    
-print('step2 done')
+def cal_repeat_task(inverse_index, lst):
+    print("start task")
+    for i in lst:
+        if count[i]!=1:
+            key = np.where(inverse_index==i)[0]
+            value = data[key,4]
+            print(value, count[i])
+            data[index[i], 4] = np.mean(value)
+#     # filtered average
+#     mean = np.mean(value)
+#     std = np.std(value, ddof = 1)
+#     elem_list = filter(lambda x: abs((x-mean)/std) < 1.5, value)
+#     data[index, 4] = np.mean(elem_list)
+
+
+''' Outlieinr discard and average ''' 
+unique, index, inverse_index, count = np.unique(Id_unique, return_index=True, return_inverse=True, return_counts=True) 
+repet_index = np.delete(np.arange(len(data)), index)
+print("len of unique %d" % max(inverse_index))
+# start multiprocess to discard outlier and average
+p = Pool(8)
+start = time.time()
+split_index = np.array_split(np.arange(max(inverse_index)), 8)
+for lst in split_index:
+    p.apply_async(cal_repeat_task, args=(inverse_index, lst))
+p.close()
+p.join()
+data = np.delete(data, repet_index, axis=0)
+end = time.time()
+time0 = end-start
+print('step2 done, use time %f' % time0)    
 np.savetxt('/home/chs/Desktop/Sonar/Data/drape_result/Result_'+name[LAYER]+'.csv', data, delimiter=',')
 print("???")

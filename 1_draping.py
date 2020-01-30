@@ -14,7 +14,7 @@ class MapImageSaver(object):
     def save_callback(self, map_image):
         print "Got sss map image callback!"
         ''' Output Data Path '''
-        filename = "meas_data_%d.cereal" % idxs[self.nbr_map_images]
+        filename = "meas_data_%d.cereal" % meas_list[LAYER][self.nbr_map_images]
         save_path = "/home/chs/Desktop/Sonar/Data/drape_result/"+name[LAYER]+"/" # Saving location for sss_meas_data.
         map_draper.write_data(map_image, save_path + filename)
         self.nbr_map_images += 1
@@ -26,7 +26,7 @@ xtf_file = "/home/chs/Desktop/Sonar/Data/xtf_ping/xtf_pings_%d.cereal" # sidesca
 nav_file = "/home/chs/Desktop/Sonar/Data/nav/all_attitudes.cereal"
 mesh_file = "/home/chs/Desktop/Sonar/Data/EM2040/mesh.npz"
 
-LAYER = 2 # 0:high 1:mid 2:low
+LAYER = 1 # 0:high 1:mid 2:low
 name = ['high','mid','low']
 meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]] # idx of swathes base on timestamp
 

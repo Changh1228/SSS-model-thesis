@@ -44,14 +44,13 @@ class beam:
         return phi, angle, beam_dist, beam_vec[2]
 
 
-''' Import multibeam data '''
-std_file = "/home/chs/Desktop/Sonar/Data/EM2040/mid/pings_centered.cereal" 
-std_pings =  std_data.mbes_ping.read_data(std_file)
-
 ''' Get mesh and norm '''
 mesh_reso = 0.5 # get mesh from std pings
-V, F, bounds = mesh_map.mesh_from_pings(std_pings, mesh_reso)
+mesh_file = "/home/chs/Desktop/Sonar/Data/EM2040/mesh.npz"
+mesh_data = np.load(mesh_file)
+V, F, bounds = mesh_data["V"], mesh_data["F"], mesh_data["bounds"]
 N = mesh_map.compute_normals(V, F) # compute normals for the entire mesh(unit vector of reflection surface)
+
 
 ''' Make 4D matrix '''
 beam_pattern = {}
@@ -70,7 +69,7 @@ incident = []
 intensity = []
 start = time.time()
 for index in meas_list:
-    meas_path = '/home/chs/Desktop/Sonar/Data/drape_result/mid/meas_data_%d.cereal' % index
+    meas_path = '/home/chs/Desktop/Sonar/Data/drape_result/low/meas_data_25.cereal' #% index
     meas_imgs = map_draper.sss_meas_data.read_single(meas_path)
     row, col = np.shape(meas_imgs.sss_waterfall_image) # row and column of waterfall image
     for i in range(row):
@@ -96,8 +95,6 @@ for index in meas_list:
             #     beam_pattern[beam_angle_index] = (v/2)
             # else:
             #     beam_pattern[beam_angle_index] = hit.intensity * abs(tan(hit.incident_angle))
-        if i == 100: 
-            break
         if i %100 == 0:
             print("meas_img%d row %d/%d done" % (index, i, row))
 end = time.time()

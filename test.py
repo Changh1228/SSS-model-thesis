@@ -13,7 +13,7 @@ def cal_task(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso,ping):
     plt.figure(figsize=(15,5))
     plt.clf()
     plt.subplot(131)
-    plt.title('drape')
+    plt.title('drape width:3000')
     plt.scatter(np.arange(len(intensity)), intensity, s=2, c='b', marker='.')
     #plt.show()
 
@@ -87,10 +87,10 @@ meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,2
 #p = Pool(8)
 start = time.time()
 for index in meas_list[LAYER]:
-    meas_path = '/home/chs/Desktop/Sonar/Data/drape_result/'+name[LAYER]+'/meas_data_%d.cereal' % index
+    meas_path = '/home/chs/Desktop/Sonar/Data/drape_result/'+name[LAYER]+'/meas_data_111024.cereal'#%d.cereal' % index
     meas_imgs = map_draper.sss_meas_data.read_single(meas_path)
-    xtf_path = "/home/chs/Desktop/Sonar/Data/xtf_ping/xtf_pings_%d.cereal" # sidescan data
-    xtf_pings = xtf_data.xtf_sss_ping.read_data(xtf_path % index)
+    xtf_path = "/home/chs/Desktop/Sonar/Data/xtf_ping/xtf_pings_11.cereal" # sidescan data
+    xtf_pings = xtf_data.xtf_sss_ping.read_data(xtf_path)# % index)
     row, col = np.shape(meas_imgs.sss_waterfall_image) # row and column of waterfall image
     for i in range(row): # for one singal ping
         # get hit points, pos, rpy...(preproduce for mutiprocessing)
