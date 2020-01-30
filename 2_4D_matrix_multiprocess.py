@@ -67,9 +67,9 @@ beamangle_reso = 0.01
 incident_reso = 0.01
 
 # choose layer
-LAYER = 2 # 0:high 1:mid 2:low
+LAYER = 1 # 0:high 1:mid 2:low
 name = ['high','mid','low']
-meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11]]#,21,29,1,19,18,5,17]]
+meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]]
 
 # Init multiprocess list and pool
 p = Pool(8)
@@ -94,6 +94,8 @@ for index in meas_list[LAYER]:
         # Add a task to the pool
         p.apply_async(cal_4D_task, args=(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso),callback = add_list) #.get() 
         # with get.(), error in multiprocess can be reported, but all cores will wait until this process done, used only for debug
+        if i %100 == 0:
+            print("meas_img%d row %d/%d done" % (index, i, row))
 p.close()
 p.join()
 end = time.time()
@@ -109,13 +111,14 @@ print("num of points %d" % len(data))
 # data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/data_low.csv"), delimiter=",")
 # Id_unique = np.load('/home/chs/Desktop/Sonar/Data/drape_result/id.npy')
 
-def cal_repeat_task(inverse_index, lst):
-    print("start task")
+def cal_repeat_task(inverse_index, lst, pool_index):
+    print("start task %d" % pool_index)
     for i in lst:
+        if i %1000 == 0:
+            print("average %d/%d done in pool %d" % (i-pool_index*len(lst), len(lst), pool_index))
         if count[i]!=1:
             key = np.where(inverse_index==i)[0]
             value = data[key,4]
-            print(value, count[i])
             data[index[i], 4] = np.mean(value)
 #     # filtered average
 #     mean = np.mean(value)
@@ -132,8 +135,10 @@ print("len of unique %d" % max(inverse_index))
 p = Pool(8)
 start = time.time()
 split_index = np.array_split(np.arange(max(inverse_index)), 8)
+pool_index = 0
 for lst in split_index:
-    p.apply_async(cal_repeat_task, args=(inverse_index, lst))
+    p.apply_async(cal_repeat_task, args=(inverse_index, lst, pool_index))
+    pool_index += 1
 p.close()
 p.join()
 data = np.delete(data, repet_index, axis=0)
