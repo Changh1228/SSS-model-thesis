@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-
+''' calibrate deltaz (use gradent dencent)'''
 def cal_grad(a, y, y_ave, beta):
     order = len(beta.c)
     grad = np.zeros(order)
@@ -120,17 +120,19 @@ def calibrate(data, dim, beta): # compute calibration result
     return data
 
 
-''' calibrate deltaz '''
-# data1 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_mid.csv"), delimiter=",") # load data
-# data2= np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_low.csv"), delimiter=",")[:30000] # load data
-# data = np.vstack((data1, data2))
-# data = np.hstack((data, np.zeros((len(data),1)))) # add a column for lower dimention average
-# beta = np.poly1d([1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
-# beta, data = grad_desc(data, 0, beta) # cal model for deltaz
-# data = calibrate(data, 0, beta) # calibrate deltaz
-# np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
+data1 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_high.csv"), delimiter=",") # load data
+data2 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_mid.csv"), delimiter=",")
+data3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_low.csv"), delimiter=",")
+data = np.vstack((data1, data2, data3))
+data = np.hstack((data, np.zeros((len(data),1)))) # add a column for lower dimention average
+beta = np.poly1d([1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
+beta, data = grad_desc(data, 0, beta) # cal model for deltaz
+data = calibrate(data, 0, beta) # calibrate deltaz
+np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
 
-''' calibrate distance '''
+
+''' calibrate distance (use discrete correct function)'''
+
 # data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv"), delimiter=",")
 # beta = np.poly1d([1., 1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
 # beta, data = grad_desc(data, 1, beta) # cal model for distance
@@ -138,11 +140,11 @@ def calibrate(data, dim, beta): # compute calibration result
 # np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_1distance.csv", data, delimiter=',')
 
 ''' calibrate beam angle '''
-data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_1distance.csv"), delimiter=",")
-beta = np.poly1d([1., 1., 1., 1.]) # choose order of model(c(a) = bkl0a^2 + b1a +b2)
-beta, data = grad_desc(data, 2, beta) # cal model for distance
-data = calibrate(data, 2, beta) # calibrate distance
-np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv", data, delimiter=',')
+# data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_1distance.csv"), delimiter=",")
+# beta = np.poly1d([1., 1., 1., 1.]) # choose order of model(c(a) = bkl0a^2 + b1a +b2)
+# beta, data = grad_desc(data, 2, beta) # cal model for distance
+# data = calibrate(data, 2, beta) # calibrate distance
+# np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv", data, delimiter=',')
 
 ''' calibrate incidence angle '''
 # data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv"), delimiter=",")

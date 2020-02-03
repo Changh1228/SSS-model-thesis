@@ -5,7 +5,7 @@ from auvlib.bathy_maps import mesh_map, map_draper
 import numpy as np
 import matplotlib.pyplot as plt
 from math import sqrt, cos, sin, acos, asin, pi, tan
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 import time
 
 
@@ -37,19 +37,16 @@ def cal_4D_task(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso):
         dist_index       = round(beam_dist / dist_reso) * dist_reso
         beam_angle_index = round(angle / beamangle_reso ) * beamangle_reso
         incident_index   = round(phi / incident_reso) * incident_reso
-        result.append([deltaz_index, dist_index, beam_angle_index, incident_index, intensity[i]])
-        Id.append(str([deltaz_index, dist_index, beam_angle_index, incident_index])) # Id for sorting with np.unique
-    return (result, Id)
+        Id = str([deltaz_index, dist_index, beam_angle_index, incident_index]) # Id for sorting with np.unique
+        result.append([deltaz_index, dist_index, beam_angle_index, incident_index, intensity[i], Id])
+    return result
 
 
 ''' Add result from multaprocess task '''
 data = []
-Id_unique = []
-def add_list(call_back_result):
-    (result, Id) = call_back_result
-    for i in range(len(result)):
-        data.append(result[i])
-        Id_unique.append(Id[i])
+def add_list(result):
+    for data_point in result:
+        data.append(data_point)
 
 
 ''' Import mesh and compute norm '''
@@ -69,7 +66,7 @@ incident_reso = 0.01
 # choose layer
 LAYER = 2 # 0:high 1:mid 2:low
 name = ['high','mid','low']
-meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]]
+meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25]]#,11,21,29,1,19,18,5,17]]
 
 # Init multiprocess list and pool
 p = Pool(8)
@@ -100,8 +97,8 @@ p.close()
 p.join()
 end = time.time()
 time0 = end-start
-data = np.array(data)
-Id_unique = np.array(Id_unique)
+Id_unique = np.array([data[i][-1] for i in range(len(data))])
+data = np.array([data[i][0:5] for i in range(len(data))])
 print('step1 done, use time %f' % time0)
 print("num of points %d" % len(data))
 
@@ -123,7 +120,7 @@ def cal_repeat_task(inverse_index, lst, pool_index):
             mean = np.mean(value)
             std = np.std(value, ddof = 1)
             elem_list = filter(lambda x: abs((x-mean)/std) < 1.3, value)
-            data[index, 4] = np.mean(elem_list)
+            data[key[0], 4] = np.mean(elem_list)
 
 
 ''' Outlieinr discard and average ''' 
