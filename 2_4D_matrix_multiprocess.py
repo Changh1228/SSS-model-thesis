@@ -21,8 +21,8 @@ def cal_4D_task(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso):
         beam_vec = vehicle_pos - beam_pos # vector from hit point to AUV
         beam_dist = np.linalg.norm(beam_vec)
         ''' cal beam angle '''
-        angle = asin(beam_vec[2]/beam_dist)# angle to level,abs
-        direction = np.cross(beam_vec[0:2], auv_vec[0:2]) # decide +-
+        angle = acos(beam_vec[2]/beam_dist)# angle w.r.t vertical,abs
+        direction = np.cross(auv_vec[0:2], beam_vec[0:2]) # decide +-
         angle  = angle *direction/abs(direction)
         angle -= roll # fix with roll
         ''' cal incident angle '''
@@ -67,7 +67,7 @@ beamangle_reso = 0.01
 incident_reso = 0.01
 
 # choose layer
-LAYER = 1 # 0:high 1:mid 2:low
+LAYER = 2 # 0:high 1:mid 2:low
 name = ['high','mid','low']
 meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]]
 
@@ -119,12 +119,11 @@ def cal_repeat_task(inverse_index, lst, pool_index):
         if count[i]!=1:
             key = np.where(inverse_index==i)[0]
             value = data[key,4]
-            data[index[i], 4] = np.mean(value)
-#     # filtered average
-#     mean = np.mean(value)
-#     std = np.std(value, ddof = 1)
-#     elem_list = filter(lambda x: abs((x-mean)/std) < 1.5, value)
-#     data[index, 4] = np.mean(elem_list)
+            # filtered average
+            mean = np.mean(value)
+            std = np.std(value, ddof = 1)
+            elem_list = filter(lambda x: abs((x-mean)/std) < 1.3, value)
+            data[index, 4] = np.mean(elem_list)
 
 
 ''' Outlieinr discard and average ''' 
