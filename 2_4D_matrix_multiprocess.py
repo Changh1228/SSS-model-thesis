@@ -66,7 +66,7 @@ incident_reso = 0.01
 # choose layer
 LAYER = 2 # 0:high 1:mid 2:low
 name = ['high','mid','low']
-meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25]]#,11,21,29,1,19,18,5,17]]
+meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]]
 
 # Init multiprocess list and pool
 p = Pool(8)
