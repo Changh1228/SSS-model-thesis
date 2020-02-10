@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 from math import sqrt, cos, sin, acos, asin, pi, tan
 from multiprocessing import Pool
 import time
+import sys
+
+EPS = sys.float_info.epsilon
 
 
 def cal_4D_task(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso):
@@ -66,7 +69,7 @@ incident_reso = 0.01
 # choose layer
 LAYER = 2 # 0:high 1:mid 2:low
 name = ['high','mid','low']
-meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]]
+meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25]]#,11,21,29,1,19,18,5,17]]
 
 # Init multiprocess list and pool
 p = Pool(8)
@@ -102,25 +105,23 @@ data = np.array([data[i][0:5] for i in range(len(data))])
 print('step1 done, use time %f' % time0)
 print("num of points %d" % len(data))
 
-# for Debug
-# np.savetxt('/home/chs/Desktop/Sonar/Data/drape_result/data_'+name[LAYER]+'.csv', data, delimiter=',')
-# np.save('/home/chs/Desktop/Sonar/Data/drape_result/id.npy', Id_unique)
-# data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/data_low.csv"), delimiter=",")
-# Id_unique = np.load('/home/chs/Desktop/Sonar/Data/drape_result/id.npy')
 
-def cal_repeat_task(inverse_index, lst, pool_index):
+def cal_repeat_task(inverse_index, lst, pool_index, data):
     print("start task %d" % pool_index)
+    result = []
     for i in lst:
         if i %1000 == 0:
             print("average %d/%d done in pool %d" % (i-pool_index*len(lst), len(lst), pool_index))
+        key = np.where(inverse_index==i)[0]
+        value = data[key,4]
         if count[i]!=1:
-            key = np.where(inverse_index==i)[0]
-            value = data[key,4]
             # filtered average
             mean = np.mean(value)
-            std = np.std(value, ddof = 1)
+            std = np.std(value, ddof = 1)+EPS
             elem_list = filter(lambda x: abs((x-mean)/std) < 1.3, value)
             data[key[0], 4] = np.mean(elem_list)
+        result.append(data[key[0]])
+    return result
 
 
 ''' Outlieinr discard and average ''' 
@@ -132,12 +133,16 @@ p = Pool(8)
 start = time.time()
 split_index = np.array_split(np.arange(max(inverse_index)), 8)
 pool_index = 0
+result = []
 for lst in split_index:
-    p.apply_async(cal_repeat_task, args=(inverse_index, lst, pool_index))
+    result.append(p.apply_async(cal_repeat_task, args=(inverse_index, lst, pool_index, data)))
     pool_index += 1
 p.close()
 p.join()
-data = np.delete(data, repet_index, axis=0)
+data = []
+for item in result:
+    data += item.get()
+data = np.array(data)
 end = time.time()
 time0 = end-start
 print('step2 done, use time %f' % time0)    
