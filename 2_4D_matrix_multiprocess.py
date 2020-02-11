@@ -69,7 +69,7 @@ incident_reso = 0.01
 # choose layer
 LAYER = 2 # 0:high 1:mid 2:low
 name = ['high','mid','low']
-meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25]]#,11,21,29,1,19,18,5,17]]
+meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]]
 
 # Init multiprocess list and pool
 p = Pool(8)
@@ -106,7 +106,7 @@ print('step1 done, use time %f' % time0)
 print("num of points %d" % len(data))
 
 
-def cal_repeat_task(inverse_index, lst, pool_index, data):
+def cal_repeat_task(inverse_index, lst, count, pool_index, data):
     print("start task %d" % pool_index)
     result = []
     for i in lst:
@@ -126,7 +126,6 @@ def cal_repeat_task(inverse_index, lst, pool_index, data):
 
 ''' Outlieinr discard and average ''' 
 unique, index, inverse_index, count = np.unique(Id_unique, return_index=True, return_inverse=True, return_counts=True) 
-repet_index = np.delete(np.arange(len(data)), index)
 print("len of unique %d" % max(inverse_index))
 # start multiprocess to discard outlier and average
 p = Pool(8)
@@ -135,7 +134,7 @@ split_index = np.array_split(np.arange(max(inverse_index)), 8)
 pool_index = 0
 result = []
 for lst in split_index:
-    result.append(p.apply_async(cal_repeat_task, args=(inverse_index, lst, pool_index, data)))
+    result.append(p.apply_async(cal_repeat_task, args=(inverse_index, lst, count, pool_index, data)))
     pool_index += 1
 p.close()
 p.join()

@@ -2,11 +2,27 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-#from multiprocessing import Pool
+from multiprocessing import Pool
+import time
 
+
+def intensity_ave_task(inverse_index, lst, pool_index, data, count):
+    print("start task %d" % pool_index)
+    result = np.zeros(6)
+    for i in lst:
+        if i %1000 == 0:
+            print("average %d/%d done in pool %d" % (i-pool_index*len(lst), len(lst), pool_index))
+        key = np.where(inverse_index==i)[0]
+        if count[i]!=1:
+            value = data[key,4]
+            data[key, -1] = np.mean(value)
+        else:
+            data[key, -1] = data[key, 4]
+        result = np.vstack((result, data[key]))
+    return result[1:]
 
 ''' calibrate deltaz (use gradent dencent)'''
-def intensity_ave(data, dim): # TODO: multiprocess
+def intensity_ave(data, dim):
     '''[calculate average intensity with same paramater after dim(dim not included)]
     
     :param data: [dataset]
@@ -17,18 +33,31 @@ def intensity_ave(data, dim): # TODO: multiprocess
     :rtype: [ndarray]
     '''
     if dim != 3:
-        for index, row in enumerate(data):
-            if index %1000 ==0:
-                print("Ave row %d/%d done" % (index, len(data)))
-            key = np.where((data[:,dim+1:4]==row[dim+1:4]).all(1))[0]
-            value = data[key,4]
-            mean = np.mean(value)
-            data[key, -1] = mean
+        idx = np.array([str(data[i, dim+1:4]) for i in range(len(data))])
+        unique, index, inverse_index, count = np.unique(idx, return_index=True, return_inverse=True, return_counts=True)
+        print("len of unique %d" % max(inverse_index))
+        split_index = np.array_split(np.arange(max(inverse_index)), 8)
+        p = Pool(8)
+        start = time.time()
+        pool_index = 0
+        result = []
+        for lst in split_index:
+            result.append(p.apply_async(intensity_ave_task, args=(inverse_index, lst, pool_index, data, count)))
+            pool_index += 1
+        p.close()
+        p.join()
+        data = np.zeros(6)
+        for item in result:
+            data = np.vstack((data, item.get())) 
+        data = data[1:]
+        end = time.time()
+        time0 = end-start
+        print('Average in dim %d done, use time %f' % (dim, time0))
     else: # dim = 3 is the last dimension, not necessary to find same para
         value = data[:,4]
-        mean = np.means(value)
+        mean = np.mean(value)
         data[:,-1] = mean
-    print("Average in dim %d done" % dim)
+        print("Average in dim %d done" % dim)
     return data
 
 def cal_grad(a, y, y_ave, beta):
@@ -58,7 +87,7 @@ def rmse(a, y, y_ave, beta):
     res = np.sqrt(np.mean(squared_err))
     return res
 
-def grad_desc(data, dim, beta):
+def grad_desc_correction(data, dim, beta):
     # dim: choosen gradient decent dimension
     print('Gradiet Decent of %dth dimenstion start'%dim)
     # Init
@@ -111,6 +140,34 @@ def grad_desc(data, dim, beta):
     plt.show()
     return beta_real, data
 
+def calibrate_task(inverse_index, lst, correction, dim, pool_index):
+    result = []
+    if type(correction) is np.poly1d: # poly correction
+        for i in lst:
+            if i %1000 == 0:
+                print("Calibration %d/%d done in pool %d" % (i-pool_index*len(lst), len(lst), pool_index))
+            key = np.where(inverse_index==i)[0]
+            value = data[key,-2]
+            a = data[key,dim]
+            y = correction(a)*value
+            data[key[0], 4] = np.mean(y)
+            result.append(data[key[0]])
+    else: # discrete correction
+        for i in lst:
+            if i %1000 == 0:
+                print("Calibration %d/%d done in pool %d" % (i-pool_index*len(lst), len(lst), pool_index))
+            keyi = np.where(inverse_index==i)[0]
+            factor = np.zeros(len(keyi))
+            for j in range(len(keyi)): # find correspinding calibrate factor
+                keyj = np.where(correction==data[keyi[j],dim])[0]
+                factor[j] =  correction[keyj[0], 1]
+            value = data[keyi,-2]
+            y = factor*value
+            data[keyi[0], 4] = np.mean(y)
+            result.append(data[keyi[0]])
+    return result
+
+
 def calibrate(data, dim, correction): 
     '''[function correcting para[dim] using polynomial or discrete function ]
     
@@ -123,54 +180,38 @@ def calibrate(data, dim, correction):
     :return: [dataset after correction]
     :rtype: [ndarray shape(n,6)]
     '''
-    # compute calibration result TODO: multiprocess
+    # compute calibration result
     idx = np.array([str(data[i, dim+1:4]) for i in range(len(data))])
-    unique, index, inverse_index, count = np.unique(idx, return_index=True, return_inverse=True, return_counts=True) 
-    repet_index = np.delete(np.arange(len(data)), index)
-    if type(correct) is np.poly1d: # poly correction
-        for i in range(len(unique)):
-            key = np.where(inverse_index==i)[0]
-            value = data[key,-2]
-            a = data[key,dim]
-            y = correction(a)*value
-            data[index[i],-2] = np.mean(y)
-    else: # discrete correction
-        # find correspinding calibrate value
-        factor = np.zeros(len(data))
-        for i in range(len(data)):
-            key = np.where(correction==data[i,dim])[0]
-            if len(key)>1: # debug
-                print("???")
-            factor[i] =  correction[key[0], 1]
-        for i in range(len(unique)):
-            key = np.where(inverse_index==i)[0]
-            value = data[key,-2]
-            a = data[key,dim]
-            y = factor[key]*a
-            data[index[i],-2] = np.mean(y)
-    data = np.delete(data, repet_index, axis=0)
+    unique, index, inverse_index = np.unique(idx, return_index=True, return_inverse=True)
+    print("len of unique %d" % max(inverse_index))
+    split_index = np.array_split(np.arange(max(inverse_index)), 8)
+    p = Pool(8)
+    start = time.time()
+    pool_index = 0
+    result = []
+    #calibrate_task(inverse_index, split_index[0], correction, dim, pool_index)
+    for lst in split_index:
+        result.append(p.apply_async(calibrate_task, args=(inverse_index, lst, correction, dim, pool_index)))
+        pool_index += 1
+    p.close()
+    p.join()
+    end = time.time()
+    time0 = end-start
+    data = []
+    for item in result:
+        data += item.get()
+    data = np.array(data)
     y = data[:, 4]
     y_ave = data[:, 5]
     catch = y - y_ave
     squared_err = catch*catch
     res = np.sqrt(np.mean(squared_err))
     print('RMSE after calibration %s'% abs(res))
+    print('Calibration in dim %d done, use time %f' % (dim, time0))
     return data
 
 
-data1 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_high.csv"), delimiter=",") # load data
-data2 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_mid.csv") , delimiter=",")
-data3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_low.csv") , delimiter=",")
-data = np.vstack((data1, data2, data3))
-data = np.hstack((data, np.zeros((len(data),1)))) # add a column for lower dimention average
-beta = np.poly1d([1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
-beta, data = grad_desc(data, 0, beta) # cal model for deltaz
-data = calibrate(data, 0, beta) # calibrate deltaz
-np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
-
-
-''' calibrate distance (use discrete correct function)'''
-def discrete_calibrate(data, dim): # TODO: multiprocess
+def discrete_correction(data, dim): # TODO: multiprocess
     '''[calibrate parameter in dim with dicrete function]
     
     :param data: [dataset]
@@ -183,20 +224,22 @@ def discrete_calibrate(data, dim): # TODO: multiprocess
     ''' compute discrete correction function'''
     data = intensity_ave(data, dim) # cal average of intensity with same para after dim and different para in dim
     unique, index, inverse_index= np.unique(data[:,dim], return_index=True, return_inverse=True)
+    print("len of unique %d" % max(inverse_index))
     correction = []# discrete correction value [para, correction]
     for i in range(len(unique)): # look for data with same para[dim]
         key = np.where(inverse_index==i)[0]
         j = data[key,4]
         j_bar = data[key,5]
-        c_dim  = np.sum(j*j_bar)/np.sum(j_bar**2)
+        c_dim  = np.sum(j*j_bar)/np.sum(j**2)
         correction.append([unique[i], c_dim])
-    
+    print(correction)
     ''' Plot correction function '''
     index = ['deltaz-a', 'distance-r', 'beam_angle-theta', 'incident_angle-phi']
     plt.figure(0)
     plt.grid()
     plt.title(index[dim])
-    plt.scatter(correction[:,0], correction[:1], s=2, c='b', marker='.')
+    correction = np.array(correction)
+    plt.scatter(correction[:,0], correction[:,1], s=2, c='b', marker='.')
     plt.show()
     ''' Calibrate intensity '''
     if dim != 3:
@@ -206,17 +249,31 @@ def discrete_calibrate(data, dim): # TODO: multiprocess
     return data
     
 
-data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv"), delimiter=",")
-data = discrete_calibrate(data, 1) # calibrate distance
-np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_1distance.csv", data, delimiter=',')
+data1 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_high.csv"), delimiter=",") # load data
+data2 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_mid.csv") , delimiter=",")
+data3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_low.csv") , delimiter=",")
+data = np.vstack((data1, data2, data3))
+data = np.hstack((data, np.zeros((len(data),1)))) # add a column for lower dimention average
+data = discrete_correction(data, 0)
+
+# beta = np.poly1d([1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
+# beta, data = grad_desc_correction(data, 0, beta) # cal model for deltaz
+# data = calibrate(data, 0, beta) # calibrate deltaz
+
+np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
+
+''' calibrate distance (use discrete correct function)'''
+# data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv"), delimiter=",")
+# data = discrete_correction(data, 1)
+# np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_1distance.csv", data, delimiter=',')
 
 ''' calibrate beam angle '''
-data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_1distance.csv"), delimiter=",")
-data = discrete_calibrate(data, 2) # calibrate distance
-np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv", data, delimiter=',')
+# data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_1distance.csv"), delimiter=",")
+# data = discrete_correction(data, 2)
+# np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv", data, delimiter=',')
 
 ''' calibrate incidence angle '''
-data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv"), delimiter=",")
-data = discrete_calibrate(data, 3) # calibrate distance
-np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_3incidence_angle.csv", data, delimiter=',')
-print("???")
+# data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv"), delimiter=",")
+# data = discrete_correction(data, 3)
+# np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_3incidence_angle.csv", data, delimiter=',')
+# print("???")
