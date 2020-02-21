@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
 import time
+import math
 
 
 def intensity_ave_task(inverse_index, lst, pool_index, data, count):
@@ -240,6 +241,10 @@ def discrete_correction(data, dim): # TODO: multiprocess
     plt.title(index[dim])
     correction = np.array(correction)
     plt.scatter(correction[:,0], correction[:,1], s=2, c='b', marker='.')
+    if dim == 3:
+        plt.scatter(correction[:,0], 1/np.tan(correction[:,0]), s=2, c='r', marker='x')
+        plt.scatter(correction[:,0], np.cos(correction[:,0]), s=2, c='g', marker='x')
+        plt.scatter(correction[:,0], np.cos(correction[:,0])**2, s=2, c='b', marker='x')
     plt.show()
     ''' Calibrate intensity '''
     if dim != 3:
@@ -258,7 +263,7 @@ data = discrete_correction(data, 0)
 
 # beta = np.poly1d([1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
 # beta, data = grad_desc_correction(data, 0, beta) # cal model for deltaz
-# data = calibrate(data, 0, beta) # calibrate deltaz
+# data = calibrate(data, 0, beta) # calibrate deltaz 
 
 np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
 
