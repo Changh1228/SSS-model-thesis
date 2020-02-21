@@ -233,18 +233,20 @@ def discrete_correction(data, dim): # TODO: multiprocess
         j_bar = data[key,5]
         c_dim  = np.sum(j*j_bar)/np.sum(j**2)
         correction.append([unique[i], c_dim])
-    print(correction)
+    # print(correction)
     ''' Plot correction function '''
-    index = ['deltaz-a', 'distance-r', 'beam_angle-theta', 'incident_angle-phi']
+    index = ['deltaz-a', 'distance-r', 'beam_angle-theta', 'incident_angle-phi&cot']
     plt.figure(0)
     plt.grid()
     plt.title(index[dim])
     correction = np.array(correction)
     plt.scatter(correction[:,0], correction[:,1], s=2, c='b', marker='.')
+    #plt.plot(correction[:,0], correction[:,1], c='b')
     if dim == 3:
-        plt.scatter(correction[:,0], 1/np.tan(correction[:,0]), s=2, c='r', marker='x')
-        plt.scatter(correction[:,0], np.cos(correction[:,0]), s=2, c='g', marker='x')
-        plt.scatter(correction[:,0], np.cos(correction[:,0])**2, s=2, c='b', marker='x')
+        plt.ylim(-2,15)
+        plt.plot(correction[:,0], abs(1/np.tan(np.pi/2-correction[:,0])), c='r')
+        #plt.plot(correction[:,0], abs(np.cos(np.pi/2-correction[:,0])), c='g')
+        #plt.plot(correction[:,0], np.cos(np.pi/2-correction[:,0])**2, c='r')
     plt.show()
     ''' Calibrate intensity '''
     if dim != 3:
@@ -257,15 +259,15 @@ def discrete_correction(data, dim): # TODO: multiprocess
 data1 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_high.csv"), delimiter=",") # load data
 data2 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_mid.csv") , delimiter=",")
 data3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_low.csv") , delimiter=",")
-data = np.vstack((data1, data2, data3))
+data = np.vstack((data2, data3))
 data = np.hstack((data, np.zeros((len(data),1)))) # add a column for lower dimention average
-data = discrete_correction(data, 0)
+data = discrete_correction(data, 3)
 
 # beta = np.poly1d([1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
 # beta, data = grad_desc_correction(data, 0, beta) # cal model for deltaz
 # data = calibrate(data, 0, beta) # calibrate deltaz 
 
-np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
+# np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
 
 ''' calibrate distance (use discrete correct function)'''
 # data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv"), delimiter=",")
