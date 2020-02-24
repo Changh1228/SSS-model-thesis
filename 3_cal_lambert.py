@@ -141,7 +141,7 @@ def grad_desc_correction(data, dim, beta):
     plt.show()
     return beta_real, data
 
-def calibrate_task(inverse_index, lst, correction, dim, pool_index):
+def calibrate_task(data, inverse_index, lst, correction, dim, pool_index):
     result = []
     if type(correction) is np.poly1d: # poly correction
         for i in lst:
@@ -184,7 +184,7 @@ def calibrate(data, dim, correction):
     # compute calibration result
     idx = np.array([str(data[i, dim+1:4]) for i in range(len(data))])
     unique, index, inverse_index = np.unique(idx, return_index=True, return_inverse=True)
-    print("len of unique %d" % max(inverse_index))
+    print("num of corrected data %d" % max(inverse_index))
     split_index = np.array_split(np.arange(max(inverse_index)), 8)
     p = Pool(8)
     start = time.time()
@@ -192,7 +192,7 @@ def calibrate(data, dim, correction):
     result = []
     #calibrate_task(inverse_index, split_index[0], correction, dim, pool_index)
     for lst in split_index:
-        result.append(p.apply_async(calibrate_task, args=(inverse_index, lst, correction, dim, pool_index)))
+        result.append(p.apply_async(calibrate_task, args=(data, inverse_index, lst, correction, dim, pool_index)))
         pool_index += 1
     p.close()
     p.join()
@@ -225,7 +225,7 @@ def discrete_correction(data, dim): # TODO: multiprocess
     ''' compute discrete correction function'''
     data = intensity_ave(data, dim) # cal average of intensity with same para after dim and different para in dim
     unique, index, inverse_index= np.unique(data[:,dim], return_index=True, return_inverse=True)
-    print("len of unique %d" % max(inverse_index))
+    print("num of factor %d" % max(inverse_index))
     correction = []# discrete correction value [para, correction]
     for i in range(len(unique)): # look for data with same para[dim]
         key = np.where(inverse_index==i)[0]
@@ -235,18 +235,18 @@ def discrete_correction(data, dim): # TODO: multiprocess
         correction.append([unique[i], c_dim])
     # print(correction)
     ''' Plot correction function '''
-    index = ['deltaz-a', 'distance-r', 'beam_angle-theta', 'incident_angle-phi&cot']
+    index = ['deltaz-a', 'distance-r', 'beam_angle-theta', 'incident_angle-phi']
     plt.figure(0)
     plt.grid()
     plt.title(index[dim])
     correction = np.array(correction)
     plt.scatter(correction[:,0], correction[:,1], s=2, c='b', marker='.')
-    #plt.plot(correction[:,0], correction[:,1], c='b')
     if dim == 3:
-        plt.ylim(-2,15)
-        plt.plot(correction[:,0], abs(1/np.tan(np.pi/2-correction[:,0])), c='r')
-        #plt.plot(correction[:,0], abs(np.cos(np.pi/2-correction[:,0])), c='g')
-        #plt.plot(correction[:,0], np.cos(np.pi/2-correction[:,0])**2, c='r')
+        plt.ylim(-2,10)
+        plt.plot(correction[:,0], abs(np.tan(correction[:,0])), c='r', label = 'cot')
+        plt.plot(correction[:,0], abs(1/np.cos(correction[:,0])), c='g', label = 'cos')
+        plt.plot(correction[:,0], 1/np.cos(correction[:,0])**2, c='y', label = 'cos^2')
+        plt.legend()
     plt.show()
     ''' Calibrate intensity '''
     if dim != 3:
@@ -262,11 +262,11 @@ data3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_low.cs
 data = np.vstack((data2, data3))
 data = np.hstack((data, np.zeros((len(data),1)))) # add a column for lower dimention average
 data = discrete_correction(data, 3)
+# np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
 
 # beta = np.poly1d([1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
 # beta, data = grad_desc_correction(data, 0, beta) # cal model for deltaz
 # data = calibrate(data, 0, beta) # calibrate deltaz 
-
 # np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
 
 ''' calibrate distance (use discrete correct function)'''
@@ -280,7 +280,7 @@ data = discrete_correction(data, 3)
 # np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv", data, delimiter=',')
 
 ''' calibrate incidence angle '''
-# data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_2beam_angle.csv"), delimiter=",")
+# data = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_test.csv"), delimiter=",")
 # data = discrete_correction(data, 3)
 # np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_3incidence_angle.csv", data, delimiter=',')
 # print("???")
