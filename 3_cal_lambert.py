@@ -240,13 +240,17 @@ def discrete_correction(data, dim): # TODO: multiprocess
     plt.grid()
     plt.title(index[dim])
     correction = np.array(correction)
-    plt.scatter(correction[:,0], correction[:,1], s=2, c='b', marker='.')
+    np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/factor"+index[dim]+".csv", correction, delimiter=',')
     if dim == 3:
         plt.ylim(-2,10)
-        plt.plot(correction[:,0], abs(np.tan(correction[:,0])), c='r', label = 'cot')
-        plt.plot(correction[:,0], abs(1/np.cos(correction[:,0])), c='g', label = 'cos')
-        plt.plot(correction[:,0], 1/np.cos(correction[:,0])**2, c='y', label = 'cos^2')
+        plt.scatter(correction[:,0], 1/correction[:,1], s=2, c='b', marker='.')
+        plt.plot(correction[:,0], abs(1/np.tan(correction[:,0])), c='r', label = '1/cot')
+        plt.plot(correction[:,0], abs(np.cos(correction[:,0])), c='g', label = '1/cos')
+        plt.plot(correction[:,0], np.cos(correction[:,0])**2, c='y', label = '1/cos^2')
         plt.legend()
+    else:
+        plt.scatter(correction[:,0], correction[:,1], s=2, c='b', marker='.')
+
     plt.show()
     ''' Calibrate intensity '''
     if dim != 3:
@@ -256,12 +260,12 @@ def discrete_correction(data, dim): # TODO: multiprocess
     return data
     
 
-data1 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_high.csv"), delimiter=",") # load data
-data2 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_mid.csv") , delimiter=",")
-data3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_low.csv") , delimiter=",")
-data = np.vstack((data2, data3))
-data = np.hstack((data, np.zeros((len(data),1)))) # add a column for lower dimention average
-data = discrete_correction(data, 3)
+# data1 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_high.csv"), delimiter=",") # load data
+# data2 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_mid.csv") , delimiter=",")
+# data3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/Result_low.csv") , delimiter=",")
+# data = np.vstack((data2, data3))
+# data = np.hstack((data, np.zeros((len(data),1)))) # add a column for lower dimention average
+# data = discrete_correction(data, 3)
 # np.savetxt("/home/chs/Desktop/Sonar/Data/drape_result/Result_0deltaz.csv", data, delimiter=',')
 
 # beta = np.poly1d([1., 1., 1.]) # choose order of model(c(a) = b0a^2 + b1a +b2)
