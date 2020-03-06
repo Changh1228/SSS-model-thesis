@@ -40,8 +40,9 @@ def cal_4D_task(hit,intensity,rpy,vehicle_pos,normal_vec,mesh_reso):
         dist_index       = round(beam_dist / dist_reso) * dist_reso
         beam_angle_index = round(angle / beamangle_reso ) * beamangle_reso
         incident_index   = round(phi / incident_reso) * incident_reso
-        Id = str([deltaz_index, dist_index, beam_angle_index, incident_index]) # Id for sorting with np.unique
-        result.append([deltaz_index, dist_index, beam_angle_index, incident_index, intensity[i], Id])
+        Id = str([incident_index, dist_index, beam_angle_index, deltaz_index]) # Id for sorting with np.unique
+        result.append([incident_index, dist_index, beam_angle_index, deltaz_index, intensity[i], Id])
+        # phi, r, theta, a
     return result
 
 
