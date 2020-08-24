@@ -4,6 +4,7 @@ from math import sqrt, cos, sin, acos, asin, pi, tan
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as pltimg
+import Image
 
 
 
@@ -52,68 +53,75 @@ def correction(meas_imgs, N, bounds, img_name, factor1, factor2, factor3):
             ''' cal index in 4D '''
             deltaz_index     = round(beam_vec[2] / deltaz_reso) * deltaz_reso
             dist_index       = round(beam_dist / dist_reso) * dist_reso
-            beam_angle_index = round(angle / beamangle_reso ) * beamangle_reso
-            incident_index   = round(phi / incident_reso) * incident_reso
-            index = [deltaz_index, dist_index, beam_angle_index, incident_index]
+            beam_angle_index = round(angle / beamangle_reso ) /100#beamangle_reso
+            incident_index   = round(phi / incident_reso) /100#incident_reso
+            #index = [deltaz_index, dist_index, beam_angle_index, incident_index]
             ''' Correction '''
             # distance
-            key = np.where(factor1[:,0]==index[1])[0][0]
+            key = np.where(factor1[:,0]==dist_index)[0][0]
             intensity *= factor1[key][1]
             img1[i][j] = intensity
             # beam angle
-            key = np.where(abs(factor2[:,0])==abs(index[2]))[0][0]
+            key = np.where(abs(factor2[:,0])==abs(beam_angle_index))[0][0]
             intensity *= np.mean(factor2[key][1])
             img2[i][j] = intensity
             # incidence angle 
-            key = np.where(abs(factor3[:,0])==abs(index[3]))[0][0]
-            intensity *= np.mean(factor3[key][1])
-            img3[i][j] = intensity
-    plt.figure(0, figsize=(16,9))
-    plt.subplot(2,2,1)
-    plt.imshow(meas_imgs.sss_waterfall_image)
-    plt.subplot(2,2,2)
-    plt.imshow(img1)
-    plt.subplot(2,2,3)
-    plt.imshow(img2)
-    plt.subplot(2,2,4)
-    plt.imshow(img3)
-    plt.savefig('/home/chs/Desktop/Sonar/Img/'+img_name+'_a')
+            key = np.where(abs(factor3[:,0])==abs(incident_index))[0][0]
+            #intensity *= np.mean(factor3[key][1])
+            intensity *= abs(tan(incident_index)) #np.mean(factor3[key][1])
+
+            if intensity < 6:
+                img3[i][j] = intensity
+    # plt.figure(0, figsize=(16,9))
+    # plt.subplot(2,2,1)
+    # plt.imshow(meas_imgs.sss_waterfall_image)
+    # plt.subplot(2,2,2)
+    # plt.imshow(img1)
+    # plt.subplot(2,2,3)
+    # plt.imshow(img2)
+    # plt.subplot(2,2,4)
+    # plt.imshow(img3)
+    # plt.savefig('/home/chs/Desktop/Sonar/Img/'+img_name+'_a')
 
     # draw average furve
-    for j in range(col):
-        img1[0,j] = np.mean(filter(lambda x: x!=0, img1[:,j]))
-        img2[0,j] = np.mean(filter(lambda x: x!=0, img2[:,j]))
-        img3[0,j] = np.mean(filter(lambda x: x!=0, img3[:,j]))
-    img_ori = np.mean(meas_imgs.sss_waterfall_image, axis = 0)
-    # compute variance
-    var_ori = np.var(img_ori)
-    var_1 = np.var(img1[0])
-    var_2 = np.var(img2[0])
-    var_3 = np.var(img3[0])
-    x = np.arange(col)
-    plt.figure(1, figsize=(16,9))
-    plt.subplot(2,2,1)
-    plt.ylim(0,9)
-    plt.title("ori_img var= %f" % (var_ori/row))
-    plt.scatter(x, img_ori, s=1, c='b')
-    plt.subplot(2,2,2)
-    plt.ylim(0,9)
-    plt.title("correct r var= %f" % (var_1/row))
-    plt.scatter(x, img1[0], s=1, c='b')
-    plt.subplot(2,2,3)
-    plt.ylim(0,9)
-    plt.title("correct theta var= %f" % (var_2/row))
-    plt.scatter(x, img2[0], s=1, c='b')
-    plt.subplot(2,2,4)
-    plt.ylim(0,9)
-    plt.title("correct phi var= %f" % (var_3/row))
-    plt.scatter(x, img3[0], s=1, c='b')
-    plt.savefig('/home/chs/Desktop/Sonar/Img/'+img_name+'_b')
+    # for j in range(col):
+    #     img1[0,j] = np.mean(filter(lambda x: x!=0, img1[:,j]))
+    #     img2[0,j] = np.mean(filter(lambda x: x!=0, img2[:,j]))
+    #     img3[0,j] = np.mean(filter(lambda x: x!=0, img3[:,j]))
+    # img_ori = np.mean(meas_imgs.sss_waterfall_image, axis = 0)
+    # # compute variance
+    # var_ori = np.var(img_ori)
+    # var_1 = np.var(img1[0])
+    # var_2 = np.var(img2[0])
+    # var_3 = np.var(img3[0])
+    # x = np.arange(col)
+    # plt.figure(1, figsize=(16,9))
+    # plt.subplot(2,2,1)
+    # plt.ylim(0,9)
+    # plt.title("ori_img var= %f" % (var_ori/row))
+    # plt.scatter(x, img_ori, s=1, c='b')
+    # plt.subplot(2,2,2)
+    # plt.ylim(0,9)
+    # plt.title("correct r var= %f" % (var_1/row))
+    # plt.scatter(x, img1[0], s=1, c='b')
+    # plt.subplot(2,2,3)
+    # plt.ylim(0,9)
+    # plt.title("correct theta var= %f" % (var_2/row))
+    # plt.scatter(x, img2[0], s=1, c='b')
+    # plt.subplot(2,2,4)
+    # plt.ylim(0,9)
+    # plt.title("correct phi var= %f" % (var_3/row))
+    # plt.scatter(x, img3[0], s=1, c='b')
+    # plt.savefig('/home/chs/Desktop/Sonar/Img/'+img_name+'_b')
 
     #plt.figure(2, figsize=(16,9))
     #plt.imshow(img3)
     #plt.savefig('/home/chs/Desktop/Sonar/Img/'+img_name+'_c')
-    pltimg.imsave('/home/chs/Desktop/Sonar/Img/'+img_name+'_c.png', img3)
+    #pltimg.imsave('/home/chs/Desktop/Sonar/Img/'+img_name+'_c.png', img3)
+    print(img3.min(), img3.max())
+    I8 = (((img3 - img3.min())/(img3.max() - img3.min())) * 255.9).astype(np.uint8)
+    img = Image.fromarray(I8)
+    img.save('/home/chs/Desktop/Sonar/Img/'+img_name+'_c.png')
 
     plt.clf()
     return
@@ -135,14 +143,14 @@ beamangle_reso = 0.01
 incident_reso = 0.01
 
 # choose layer
-LAYER = 2 # 0:high 1:mid 2:low
+LAYER = 1 # 0:high 1:mid 2:low
 later_name = ['high','mid','low']
-meas_list = [[33,13,9,30,43,44,24,14,20],[28,36,42,26,16,41,6,38,45],[25,11,21,29,1,19,18,5,17]]
+meas_list = [[33,13,9,30,43,44,24,14,20],[16],[25,11,21,29,1,19,18,5,17]] # 28,36,42,26,16,41,6,38,45
 
 #factor = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/factor" + index[dim] +".csv") , delimiter=",")
 factor1 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/factor_distance-r.csv") , delimiter=",")
 factor2 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/factor_beam_angle-theta.csv") , delimiter=",")
-factor3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/factor_incident_angle-phi.csv") , delimiter=",")
+factor3 = np.loadtxt(open("/home/chs/Desktop/Sonar/Data/drape_result/factor_incident_angle-phi_filtered.csv") , delimiter=",")
 
 for index in meas_list[LAYER]:
     meas_path = '/home/chs/Desktop/Sonar/Data/drape_result/'+later_name[LAYER]+'/meas_data_%d.cereal' % index
@@ -150,9 +158,4 @@ for index in meas_list[LAYER]:
     img_name = 'corrected_'+str(LAYER)+'_'+str(index)
     correction(meas_imgs, N, bounds, img_name, factor1, factor2, factor3)
 
-LAYER = 1
-for index in meas_list[LAYER]:
-    meas_path = '/home/chs/Desktop/Sonar/Data/drape_result/'+later_name[LAYER]+'/meas_data_%d.cereal' % index
-    meas_imgs = map_draper.sss_meas_data.read_single(meas_path)
-    img_name = 'corrected_'+str(LAYER)+'_'+str(index)
-    correction(meas_imgs, N, bounds, img_name, factor1, factor2, factor3)  
+print("Orz")

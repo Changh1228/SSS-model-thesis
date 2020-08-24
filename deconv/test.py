@@ -1,0 +1,298 @@
+from auvlib.data_tools import std_data, xtf_data
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+from math import sqrt, tan, log, pi, exp, ceil
+from scipy.ndimage import gaussian_filter1d
+from scipy.stats import multivariate_normal
+from tqdm import tqdm
+import copy
+
+
+class Deconv(object):
+    def __init__(self):
+        # read xtf data
+        attitude_data = std_data.attitude_entry.read_data("/home/chs/Desktop/Sonar/Deconvolution/data/mbes_attitude.cereal")
+        self.xtf_ping = xtf_data.xtf_sss_ping.parse_file("/home/chs/Desktop/Sonar/Deconvolution/data/SSH-0047-l08s01-20190618-205611.XTF")
+
+        self.xtf_ping = xtf_data.match_attitudes(self.xtf_ping, attitude_data)[350:-650]
+
+        # normalize waterfall image
+        self.waterfall = xtf_data.make_waterfall_image(self.xtf_ping)
+        # self.waterfall = self.normalize_sss_img(self.waterfall)
+
+        # compute scan parameters
+        self.speed_lis, self.time_lis, self.slant_range_lis = self.scan_info(self.xtf_ping)
+
+        self.port_len = len(self.xtf_ping[0].port.pings)
+        self.stbd_len = len(self.xtf_ping[0].stbd.pings)
+
+    def normalise_sss_img(self, waterfall_image, clip_max=5):  # TODO: try cotan correction
+        """Given a sss_waterfall_image from draping, process the
+        image and return a normalised version where the column-wise
+        mean is set to 1."""
+
+        img_mean = waterfall_image.mean(axis=0)
+
+        # set points around nadir to 0
+        waterfall_image = waterfall_image.copy()
+        waterfall_image[:, img_mean < 1e-1] = 0
+
+        img_normalised = np.divide(
+            waterfall_image,
+            img_mean,
+            out=np.zeros_like(waterfall_image),
+            where=(img_mean != 0))
+        img_normalised = np.clip(a=img_normalised, a_min=img_normalised.min(), a_max=clip_max)
+
+        return img_normalised
+
+    def scan_info(self, xtf_ping):
+        '''[Average speed of the auv and save scan parameters]
+        '''
+        # Filter auv speed
+        pos = np.array([0, 0])
+        time = 0
+        speed_lis = []
+        time_lis = []
+        slant_range_lis = []
+        for ping in xtf_ping:
+            pos_dif = pos-ping.pos_[:2]
+            time_dif = ping.time_stamp_-time
+            pos = ping.pos_[:2]
+            time = ping.time_stamp_
+            speed_lis.append(sqrt(pos_dif[0]**2 + pos_dif[1]**2)/time_dif*1000)
+            time_lis.append(time_dif)
+            slant_range_lis.append(ping.port.slant_range)
+
+        speed_lis = np.array(speed_lis[1:])
+        speed_lis = gaussian_filter1d(speed_lis, 10)  # smooth the speed
+        speed_lis = np.r_[speed_lis[0], speed_lis]
+
+        # plt.title('AUV speed')
+        # plt.ylim(0,3)
+        # plt.scatter(np.arange(len(speed_lis)), speed_lis, s=2)
+        # plt.show()
+
+        return speed_lis, time_lis[1:], slant_range_lis
+
+    def eval_sharpness(self, I_conv):
+        # TODO: FFT clearence evaluate
+        # TODO: evaluate the whole image
+        brenner = 0
+        for i in range(len(I_conv)-2):
+            brenner += (I_conv[i+2]-I_conv[i])**2
+        brenner = brenner / len(I_conv)
+        print('Brenner sharpness = %e' % brenner)
+
+    def eval_img_sharpness(self, img,  alg='brenner'):
+        #img = cv2.normalize(src=img, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+        #img = cv2.equalizeHist(img)
+        if alg == 'brenner':
+            brenner = 0
+            for j in range(len(img)):
+                I = img[j]
+                for i in range(len(I)-1):
+                    brenner = brenner + (I[i+1]-I[i])**2
+                brenner = brenner * 1. / len(I)
+            brenner = brenner * 1. / len(img)
+            print('Brenner sharpness = %e' % brenner)
+
+    def gauss_para(self, j, side):
+        '''[Compute the parameters of deconv gaussion kernel]
+
+        :param speed_lis: [description]
+        :type speed_lis: [type]
+        :param time_lis: [description]
+        :type time_lis: [type]
+        :param slant_range_lis: [description]
+        :type slant_range_lis: [type]
+        :return: [description]
+        :rtype: [type]
+        '''
+        delta_t = np.mean(self.time_lis)/1000  # get average delta t(160ms or 170ms)
+        delta_s = self.speed_lis*delta_t  # ping interval in meters
+        slant_range_lis = np.array(self.slant_range_lis)
+
+        ping_len = 9956
+        r = slant_range_lis * j / ping_len
+
+        # beam_angle = 1.7 * pi / 180  # test parameters
+        beam_angle = 3000./400/40 * pi / 180  # parameters from sonar manul
+        w = 2*tan(beam_angle/2)*r
+        n = w/delta_s
+        var = (0.5*n)**2/(-2*log(0.5))
+
+        return var
+
+    def vis_waterfall_img(self, waterfall, title, mode=cv2.WINDOW_KEEPRATIO):
+        waterfall = cv2.normalize(src=waterfall, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+        waterfall = cv2.equalizeHist(waterfall)
+        cv2.namedWindow(title, mode)  # cv2.WINDOW_FREERATIO/ cv2.WINDOW_KEEPRATIO
+        cv2.imshow(title, waterfall)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        # xtf_data.show_waterfall_image(test.xtf_ping) # built in vis method
+
+    def make_waterfall_image2(self):
+        port_len = len(self.xtf_ping[0].port.pings)
+        stbd_len = len(self.xtf_ping[0].stbd.pings)
+        row_len = port_len + stbd_len
+        img = []
+        for ping in self.xtf_ping:
+            row = np.zeros(row_len)
+            row[stbd_len:] = ping.stbd.pings
+            row = row[::-1]
+            row[port_len:] = ping.port.pings
+            img.append(row)
+
+        img = np.array(img)
+        self.vis_waterfall_img(img)
+
+    def deconv_column_pinv(self, j, kernel_len, side):
+        '''[Deconv with pseudo inverse]
+
+        :param j: [description]
+        :type j: [type]
+        '''
+
+        var = self.gauss_para(j, side)
+        # width = int(1 + 2 * ceil(max(var)))
+
+        # Take the column j
+        if side == 'port':
+            I_conv = self.waterfall[:, self.port_len-j-1]
+        elif side == 'stbd':
+            I_conv = self.waterfall[:, self.stbd_len+j]
+
+        # Check if var too small
+        if np.mean(var) == 0:
+            return np.r_[I_conv, np.zeros(2)]
+        gaussian = multivariate_normal(mean=0, cov=np.mean(var))
+        x = np.arange(0, kernel_len, 1)
+        x = x - np.mean(x)
+        y = gaussian.pdf(x)
+        y = y/sum(y)  # Normalize
+        if y[int((kernel_len-1)/2)] == 1:
+            return np.r_[I_conv, np.zeros(2)]
+
+        # Make convolution matrix A
+        row = len(I_conv)
+        col = int(len(I_conv) + kernel_len - 1)
+        A = np.zeros((row, col))
+        for i in range(len(A)):
+            x = np.arange(0, kernel_len, 1)
+            x = x - np.mean(x)
+            # gaussian = multivariate_normal(mean=0, cov=var[i])
+            # y = gaussian.pdf(x)
+            y = np.ones(kernel_len)
+            y = y/sum(y)  # Normalize
+            start = i
+            end = i + kernel_len
+            A[i, start:end] = y
+        A_inv = np.linalg.pinv(A)
+        s = np.dot(A_inv, I_conv)
+        return s
+
+    def deconv_pinv_test(self, kernel_len=5):
+        start, end = 7900, 8400
+        col = end - start
+        ori_row = len(self.waterfall)
+        test_row = ori_row + kernel_len - 1
+        ori_img, test_img = np.zeros((ori_row, col)), np.zeros((test_row, col))
+
+        for j in tqdm(range(start, end)):
+            test_img[:, j-start] = self.deconv_column_pinv(j, kernel_len, 'port')
+            ori_img[:, j-start] = self.waterfall[:, self.port_len-j-1]
+        self.eval_img_sharpness(ori_img)
+        self.eval_img_sharpness(test_img)
+        self.vis_waterfall_img(ori_img, 'pinv_result')
+
+    def deconv_RL_col(self, j, kernel_len, iteration, side):
+
+        var = self.gauss_para(j, side)
+
+        kernel_half = int((kernel_len-1)/2)
+
+        # Take the column j
+        if side == 'port':
+            I_conv = self.waterfall[:, self.port_len-j-1]
+        elif side == 'stbd':
+            I_conv = self.waterfall[:, self.stbd_len+j]
+
+        # Check if var too small
+        # if np.mean(var) == 0:
+        #     return I_conv
+        # # gaussian = multivariate_normal(mean=0, cov=np.mean(var))
+        # x = np.arange(0, kernel_len, 1)
+        # x = x - np.mean(x)
+        # y = np.ones(kernel_len)  # gaussian.pdf(x)
+        # y = y/sum(y)  # Normalize
+        # if y[kernel_half] == 1:
+        #     return I_conv
+
+        add_up = np.mean(I_conv) * np.ones(kernel_half)
+        s = np.r_[add_up, I_conv, add_up]  # get the init s
+
+        # Make conv matrix A
+        row = len(I_conv)
+        col = int(len(I_conv) + kernel_len - 1)
+        A = np.zeros((row, col))
+        for i in range(len(A)):
+            x = np.arange(0, kernel_len, 1)
+            x = x - np.mean(x)
+            gaussian = multivariate_normal(mean=0, cov=var[i])
+            y = gaussian.pdf(x)
+            # y = np.ones(kernel_len)
+            # y[kernel_half] += 2
+            y = y/sum(y)  # Normalize
+            start = i
+            end = i + kernel_len
+            A[i, start:end] = y
+
+        for k in range(iteration):
+            C = np.dot(A, s)
+            cache = I_conv / C
+            add_up = np.mean(cache) * np.ones(kernel_half)
+            cache = np.r_[add_up, cache, add_up]
+            cache = np.dot(A, cache)
+            add_up = np.mean(cache) * np.ones(kernel_half)
+            cache = np.r_[add_up, cache, add_up]
+            s = s * cache
+
+        return s
+
+    def deconv_RL(self, kernel_len=5, iteration=50):
+        start, end = 7900, 8400
+        col = end - start
+        ori_row = len(self.waterfall)
+        test_row = len(self.waterfall) + kernel_len - 1
+        ori_img, test_img = np.zeros((ori_row, col)), np.zeros((test_row, col))
+
+        for j in tqdm(range(start, end)):
+            ori_img[:, j-start] = self.waterfall[:, self.port_len-j-1]
+            test_img[:, j-start] = self.deconv_RL_col(j, kernel_len, iteration, 'port')
+        self.eval_img_sharpness(ori_img)
+        self.eval_img_sharpness(test_img)
+        self.vis_waterfall_img(test_img, 'pinv_result')
+        # self.vis_waterfall_img(ori_img, 'ori_img')
+
+        return
+
+
+
+test = Deconv()
+# test.vis_waterfall_img(test.waterfall, 'test')
+# test.deconv_pinv_test()
+# test.deconv_column_pinv(9900, 5, 'port')
+# test.deconv_RL_col(9000, 3, 3, 'port')
+test.deconv_RL()
+
+
+def cal_deconv_kernel(kernel, lamda, thresh, s_len=21):
+    I_len = s_len-len(kernel)+1
+    A = np.repeat(np.r_[kernel, np.zeros(I_len)])
+    return
+
+
+print("Orz")
