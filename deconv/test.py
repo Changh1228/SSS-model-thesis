@@ -2,7 +2,7 @@ from auvlib.data_tools import std_data, xtf_data
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from math import sqrt, tan, log, pi, exp, ceil
+from math import sqrt, tan, sin, log, pi, exp, ceil
 from scipy.ndimage import gaussian_filter1d
 from scipy.stats import multivariate_normal
 from tqdm import tqdm
@@ -15,7 +15,7 @@ class Deconv(object):
         attitude_data = std_data.attitude_entry.read_data("/home/chs/Desktop/Sonar/Deconvolution/data/mbes_attitude.cereal")
         self.xtf_ping = xtf_data.xtf_sss_ping.parse_file("/home/chs/Desktop/Sonar/Deconvolution/data/SSH-0047-l08s01-20190618-205611.XTF")
 
-        self.xtf_ping = xtf_data.match_attitudes(self.xtf_ping, attitude_data)[350:-650]
+        self.xtf_ping = xtf_data.match_attitudes(self.xtf_ping, attitude_data)[350:-350]
 
         # normalize waterfall image
         self.waterfall = xtf_data.make_waterfall_image(self.xtf_ping)
@@ -86,8 +86,8 @@ class Deconv(object):
         print('Brenner sharpness = %e' % brenner)
 
     def eval_img_sharpness(self, img,  alg='brenner'):
-        #img = cv2.normalize(src=img, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
-        #img = cv2.equalizeHist(img)
+        # img = cv2.normalize(src=img, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+        # img = cv2.equalizeHist(img)
         if alg == 'brenner':
             brenner = 0
             for j in range(len(img)):
@@ -96,7 +96,8 @@ class Deconv(object):
                     brenner = brenner + (I[i+1]-I[i])**2
                 brenner = brenner * 1. / len(I)
             brenner = brenner * 1. / len(img)
-            print('Brenner sharpness = %e' % brenner)
+            # print('Brenner sharpness = %e' % brenner)
+            return brenner
 
     def gauss_para(self, j, side):
         '''[Compute the parameters of deconv gaussion kernel]
@@ -119,13 +120,11 @@ class Deconv(object):
 
         # beam_angle = 1.7 * pi / 180  # test parameters
         beam_angle = 3000./400/40 * pi / 180  # parameters from sonar manul
-        w = 2*tan(beam_angle/2)*r
-        n = w/delta_s
-        var = (0.5*n)**2/(-2*log(0.5))
+        w = 2*tan(beam_angle/2)*r  # half power beamwidth
+        n = w/delta_s  # beamwidth in pixel
+        return n
 
-        return var
-
-    def vis_waterfall_img(self, waterfall, title, mode=cv2.WINDOW_KEEPRATIO):
+    def vis_waterfall_img(self, waterfall, title, mode=cv2.WINDOW_FREERATIO):
         waterfall = cv2.normalize(src=waterfall, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
         waterfall = cv2.equalizeHist(waterfall)
         cv2.namedWindow(title, mode)  # cv2.WINDOW_FREERATIO/ cv2.WINDOW_KEEPRATIO
@@ -149,15 +148,28 @@ class Deconv(object):
         img = np.array(img)
         self.vis_waterfall_img(img)
 
-    def deconv_column_pinv(self, j, kernel_len, side):
+    def kernel(self, kernel_len, beamwidth, mode):
+        x = np.arange(0, kernel_len, 1)
+        x = x - np.mean(x)
+        if mode == 'gauss':
+            var = (0.5*beamwidth)**2/(-2*log(0.5))
+            y = np.exp(-x**2 / (2*var)) / (sqrt(var*2*pi))
+        if mode == 'flat':
+            y = np.ones(kernel_len)
+        if mode == 'sin':
+            a = pi/(3*beamwidth)
+            y = np.cos(a*x)
+            y[y < 0] = 0
+        return (y/sum(y))
+
+    def deconv_pinv_col(self, j, kernel_len, kernel_mood, side):
         '''[Deconv with pseudo inverse]
 
         :param j: [description]
         :type j: [type]
         '''
 
-        var = self.gauss_para(j, side)
-        # width = int(1 + 2 * ceil(max(var)))
+        beamwidth = self.gauss_para(j, side)  # get beamwidth in pixel
 
         # Take the column j
         if side == 'port':
@@ -165,52 +177,51 @@ class Deconv(object):
         elif side == 'stbd':
             I_conv = self.waterfall[:, self.stbd_len+j]
 
+        kernel_half = int((kernel_len-1)/2)
+        add_up = np.mean(I_conv) * np.ones(kernel_half)
         # Check if var too small
-        if np.mean(var) == 0:
-            return np.r_[I_conv, np.zeros(2)]
-        gaussian = multivariate_normal(mean=0, cov=np.mean(var))
-        x = np.arange(0, kernel_len, 1)
-        x = x - np.mean(x)
-        y = gaussian.pdf(x)
-        y = y/sum(y)  # Normalize
-        if y[int((kernel_len-1)/2)] == 1:
-            return np.r_[I_conv, np.zeros(2)]
+        if np.mean(beamwidth) == 0:
+            return np.r_[add_up, I_conv, add_up]
+
+        y = self.kernel(kernel_len, np.mean(beamwidth), kernel_mood)
+        if y[kernel_half] == 1:
+            return np.r_[add_up, I_conv, add_up]
 
         # Make convolution matrix A
         row = len(I_conv)
         col = int(len(I_conv) + kernel_len - 1)
         A = np.zeros((row, col))
         for i in range(len(A)):
-            x = np.arange(0, kernel_len, 1)
-            x = x - np.mean(x)
-            # gaussian = multivariate_normal(mean=0, cov=var[i])
-            # y = gaussian.pdf(x)
-            y = np.ones(kernel_len)
-            y = y/sum(y)  # Normalize
-            start = i
-            end = i + kernel_len
-            A[i, start:end] = y
+            y = self.kernel(kernel_len, beamwidth[i], kernel_mood)
+            A[i, i:i+kernel_len] = y
+
         A_inv = np.linalg.pinv(A)
         s = np.dot(A_inv, I_conv)
         return s
 
-    def deconv_pinv_test(self, kernel_len=5):
-        start, end = 7900, 8400
+    def deconv_pinv(self, kernel_len=5, kernel_mood='sin'):
+        start, end = 9000, 9500
         col = end - start
         ori_row = len(self.waterfall)
         test_row = ori_row + kernel_len - 1
+        kernel_half = int((kernel_len-1)/2)
         ori_img, test_img = np.zeros((ori_row, col)), np.zeros((test_row, col))
 
         for j in tqdm(range(start, end)):
-            test_img[:, j-start] = self.deconv_column_pinv(j, kernel_len, 'port')
-            ori_img[:, j-start] = self.waterfall[:, self.port_len-j-1]
-        self.eval_img_sharpness(ori_img)
-        self.eval_img_sharpness(test_img)
+            test_img[:, j-start] = self.deconv_pinv_col(j, kernel_len, kernel_mood, 'stbd')
+            ori_img[:, j-start] = self.waterfall[:, self.port_len+j]
+        test_img = test_img[kernel_half:test_row-kernel_half]
+        ori_sharp = self.eval_img_sharpness(ori_img)
+        deconv_sharp = self.eval_img_sharpness(test_img)
+        improve = (deconv_sharp - ori_sharp)/ori_sharp * 100
+        print("ori_img sharpness = %e" % ori_sharp)
+        print("deconv sharpenss = %e" % deconv_sharp)
+        print("improvment = %f %%" % improve)
         self.vis_waterfall_img(ori_img, 'pinv_result')
 
-    def deconv_RL_col(self, j, kernel_len, iteration, side):
+    def deconv_RL_col(self, j, kernel_len, kernel_mood, iteration, side):
 
-        var = self.gauss_para(j, side)
+        beamwidth = self.gauss_para(j, side)
 
         kernel_half = int((kernel_len-1)/2)
 
@@ -221,17 +232,15 @@ class Deconv(object):
             I_conv = self.waterfall[:, self.stbd_len+j]
 
         # Check if var too small
-        # if np.mean(var) == 0:
-        #     return I_conv
-        # # gaussian = multivariate_normal(mean=0, cov=np.mean(var))
-        # x = np.arange(0, kernel_len, 1)
-        # x = x - np.mean(x)
-        # y = np.ones(kernel_len)  # gaussian.pdf(x)
-        # y = y/sum(y)  # Normalize
-        # if y[kernel_half] == 1:
-        #     return I_conv
-
         add_up = np.mean(I_conv) * np.ones(kernel_half)
+        if np.mean(beamwidth) == 0:
+            return np.r_[add_up, I_conv, add_up]
+
+        y = self.kernel(kernel_len, np.mean(beamwidth), kernel_mood)
+        if y[kernel_half] == 1:
+            print("beamwidth too small")
+            return np.r_[add_up, I_conv, add_up]
+
         s = np.r_[add_up, I_conv, add_up]  # get the init s
 
         # Make conv matrix A
@@ -239,16 +248,8 @@ class Deconv(object):
         col = int(len(I_conv) + kernel_len - 1)
         A = np.zeros((row, col))
         for i in range(len(A)):
-            x = np.arange(0, kernel_len, 1)
-            x = x - np.mean(x)
-            gaussian = multivariate_normal(mean=0, cov=var[i])
-            y = gaussian.pdf(x)
-            # y = np.ones(kernel_len)
-            # y[kernel_half] += 2
-            y = y/sum(y)  # Normalize
-            start = i
-            end = i + kernel_len
-            A[i, start:end] = y
+            y = self.kernel(kernel_len, beamwidth[i], kernel_mood)
+            A[i, i:i+kernel_len] = y
 
         for k in range(iteration):
             C = np.dot(A, s)
@@ -262,37 +263,33 @@ class Deconv(object):
 
         return s
 
-    def deconv_RL(self, kernel_len=5, iteration=50):
-        start, end = 7900, 8400
+    def deconv_RL(self, kernel_len=5, kernel_mood='sin', iteration=10):
+        start, end = 8500, 9900
         col = end - start
         ori_row = len(self.waterfall)
         test_row = len(self.waterfall) + kernel_len - 1
+        kernel_half = int((kernel_len-1)/2)
         ori_img, test_img = np.zeros((ori_row, col)), np.zeros((test_row, col))
 
         for j in tqdm(range(start, end)):
-            ori_img[:, j-start] = self.waterfall[:, self.port_len-j-1]
-            test_img[:, j-start] = self.deconv_RL_col(j, kernel_len, iteration, 'port')
-        self.eval_img_sharpness(ori_img)
-        self.eval_img_sharpness(test_img)
+            ori_img[:, j-start] = self.waterfall[:, self.port_len+j]
+            test_img[:, j-start] = self.deconv_RL_col(j, kernel_len, kernel_mood, iteration, 'stbd')
+        test_img = test_img[kernel_half:test_row-kernel_half]
+        ori_sharp = self.eval_img_sharpness(ori_img)
+        deconv_sharp = self.eval_img_sharpness(test_img)
+        improve = (deconv_sharp - ori_sharp)/ori_sharp * 100
+        print("ori_img sharpness = %e" % ori_sharp)
+        print("deconv sharpenss = %e" % deconv_sharp)
+        print("improvment = %f %%" % improve)
         self.vis_waterfall_img(test_img, 'pinv_result')
         # self.vis_waterfall_img(ori_img, 'ori_img')
-
-        return
-
 
 
 test = Deconv()
 # test.vis_waterfall_img(test.waterfall, 'test')
-# test.deconv_pinv_test()
+test.deconv_pinv()
 # test.deconv_column_pinv(9900, 5, 'port')
 # test.deconv_RL_col(9000, 3, 3, 'port')
-test.deconv_RL()
-
-
-def cal_deconv_kernel(kernel, lamda, thresh, s_len=21):
-    I_len = s_len-len(kernel)+1
-    A = np.repeat(np.r_[kernel, np.zeros(I_len)])
-    return
-
+# test.deconv_RL()
 
 print("Orz")

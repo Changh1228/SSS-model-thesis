@@ -1,0 +1,13 @@
+function deconvolution=deconvolve(convolution,Lambda,threshold)
+slen=21;
+Ilen=slen-length(convolution)+1;
+a=repmat(([convolution, zeros(1,Ilen)]), 1,slen);
+A=reshape(a(1:(Ilen*slen)),slen,Ilen)'
+D=[-1 2 -1 zeros(1,slen-2)];
+D=repmat(D,1,slen-2);
+D=[1 -1 zeros(1,slen-2) D -1 1];
+D=reshape(D,slen,slen);
+B=inv(A'*A+Lambda*D)*A';
+d=B((slen+1)/2,:);
+i=find(abs(d)>threshold);
+deconvolution=d(i);

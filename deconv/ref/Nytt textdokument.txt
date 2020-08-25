@@ -1,0 +1,104 @@
+%Our convolve filter:
+c=[.25, .5, .25]
+%our impulse signal all 0 except for one element of 100
+strue=[zeros(1,1000), 100, zeros(1,1000)]
+%the resulting convolved intensity  
+I=convolve(c,strue)  
+%find the deconvolution filter to apply to I to estimate strue
+% here 1E-6 is the smoothing parameter and 
+% 1E-2 is the threshold (smaller filter elements set to 0)
+dc6_2=deconvolve(c, 1E-6, 1E-2)
+dc0_2=deconvolve(c, 1E-0, 1E-2)
+%apply the deconvol filters to our simulated intensity
+sfalse0_2=convolve(dc0_2,I)
+sfalse6_2=convolve(dc6_2,I)
+plot(sfalse0_2)
+hold
+plot(sfalse6_2)
+plot(sfalse0_2)
+dc6_2=deconvolve(c, 1E-6, 1E-2)
+sfalse6_2=convolve(dc6_2,I)
+plot(sfalse6_2)
+sfalse0_2=convolve(dc0_2,I)
+sfalse6_2=convolve(dc6_2,I)
+dc1_2=deconvolve(c, 1E-1, 1E-2)
+dc2_2=deconvolve(c, 1E-2, 1E-2)
+dc4_2=deconvolve(c, 1E-4, 1E-2)
+sfalse1_2=convolve(dc1_2,I)
+sfalse2_2=convolve(dc2_2,I)
+sfalse4_2=convolve(dc4_2,I)
+plot(sfalse0_2)
+hold
+plot(sfalse1_2)
+plot(sfalse2_2)
+plot(sfalse4_2)
+plot(sfalse6_2)
+dc8_2=deconvolve(c, 1E-8, 1E-2)
+sfalse8_2=convolve(dc8_2,I)
+plot(sfalse4_2)
+hold
+plot(sfalse6_2)
+plot(sfalse8_2)
+sfalse6_2(970:1000)
+sfalse6_2(960:1040)
+sfalse8_2(960:1040)
+sfalse4_2(960:1040)
+max(sfalse6_2)
+[i,v]=max(sfalse6_2)
+plotresponse(sfalse6_2)
+hold
+plotresponse(sfalse4_2)
+plotresponse(sfalse2_2)
+plotresponse(sfalse1_2)
+dc8_4=deconvolve(c, 1E-8, 1E-4)
+dc4_4=deconvolve(c, 1E-4, 1E-4)
+sfalse4_4=convolve(dc4_4,I)
+sfalse8_4=convolve(dc8_4,I)
+plotresponse(sfalse8_4)
+hold
+plotresponse(sfalse8_2)
+plotresponse(sfalse4_4)
+plotresponse(sfalse4_2)
+dc8_1=deconvolve(c, 1E-8, 1E-1)
+dc4_1=deconvolve(c, 1E-4, 1E-1)
+sfalse8_1=convolve(dc8_1,I)
+plotresponse(sfalse8_1)
+sfalse4_1=convolve(dc4_1,I)
+plotresponse(sfalse4_1)
+plotresponse(sfalse4_2)
+plotresponse(sfalse4_1)
+hold
+plotresponse(sfalse4_2)
+plotresponse(sfalse4_4)
+plotresponse(sfalse4_6)
+plotresponse(sfalse4_1)
+plotresponse(sfalse4_6)
+plotresponse(sfalse4_2)
+dc8_1=deconvolve(c, 1E-8, 1E-1)
+d
+sfalse8_1=convolve(dc8_1,I)
+plotresponse(sfalse8_1)
+dc6_2=deconvolve(c, 1E-6, 1E-2)
+dc4_2=deconvolve(c, 1E-4, 1E-2)
+dc2_2=deconvolve(c, 1E-2, 1E-2)
+dc1_2=deconvolve(c, 1E-1, 1E-2)
+sfalse6_2=convolve(dc6_2,I)
+sfalse4_2=convolve(dc4_2,I)
+sfalse2_2=convolve(dc2_2,I)
+sfalse1_2=convolve(dc1_2,I)
+help plot
+figure
+hold
+plotresponse(sfalse6_2)
+plotresponse(sfalse4_2)
+plotresponse(sfalse6_2)
+hold
+plotresponse(sfalse4_2)
+plotresponse(sfalse2_2)
+plotresponse(sfalse1_2)
+figure
+hold
+plotresponse(sfalse6_2)
+plotresponse(sfalse4_2)
+plotresponse(sfalse2_2)
+plotresponse(sfalse1_2)

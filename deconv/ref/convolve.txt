@@ -1,0 +1,10 @@
+function convolution=convolve(c,s)
+lenc=length(c(:));
+lens=length(s(:));
+rows=lens-lenc+1;
+a=repmat(([c(:)', zeros(1,rows)]), 1,rows);
+size(a)
+sz=rows*lens;
+con=reshape(a(1:sz),lens, rows)';
+size(con)
+convolution=(con*s(:))';

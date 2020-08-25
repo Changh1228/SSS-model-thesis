@@ -1,0 +1,12 @@
+function [ output_args ] = plotresponse( s )
+[v,i]=max(s);
+ind=find(abs(s)>.01);
+n=length(ind);
+n=floor(n/2+10);
+plot([(1000-n):(1000+n)], s((i-n):(i+n)))
+%UNTITLED2 Summary of this function goes here
+%   Detailed explanation goes here
+
+
+end
+
