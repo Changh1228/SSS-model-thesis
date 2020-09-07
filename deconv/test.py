@@ -12,14 +12,15 @@ import copy
 class Deconv(object):
     def __init__(self):
         # read xtf data
-        attitude_data = std_data.attitude_entry.read_data("/home/chs/Desktop/Sonar/Deconvolution/data/mbes_attitude.cereal")
-        self.xtf_ping = xtf_data.xtf_sss_ping.parse_file("/home/chs/Desktop/Sonar/Deconvolution/data/SSH-0047-l08s01-20190618-205611.XTF")
+        # attitude_data = std_data.attitude_entry.read_data("/home/chs/Desktop/Sonar/Deconvolution/data/mbes_attitude.cereal")
+        # self.xtf_ping = xtf_data.xtf_sss_ping.parse_file("/home/chs/Desktop/Sonar/Deconvolution/data/SSH-0047-l08s01-20190618-205611.XTF")
+        # self.xtf_ping = xtf_data.match_attitudes(self.xtf_ping, attitude_data)[350:-350]
 
-        self.xtf_ping = xtf_data.match_attitudes(self.xtf_ping, attitude_data)[350:-350]
-
+        xtf_file = "/home/chs/Desktop/Sonar/Data/xtf_ping/xtf_pings_19.cereal"  # sidescan data 42. 26 21 29 19 18
+        self.xtf_ping = xtf_data.xtf_sss_ping.read_data(xtf_file)[200:300]
         # normalize waterfall image
         self.waterfall = xtf_data.make_waterfall_image(self.xtf_ping)
-        # self.waterfall = self.normalize_sss_img(self.waterfall)
+        # self.waterfall = self.normalise_sss_img(self.waterfall)
 
         # compute scan parameters
         self.speed_lis, self.time_lis, self.slant_range_lis = self.scan_info(self.xtf_ping)
@@ -99,7 +100,7 @@ class Deconv(object):
             # print('Brenner sharpness = %e' % brenner)
             return brenner
 
-    def gauss_para(self, j, side):
+    def gauss_para(self, j, beam_angle, side):
         '''[Compute the parameters of deconv gaussion kernel]
 
         :param speed_lis: [description]
@@ -119,7 +120,7 @@ class Deconv(object):
         r = slant_range_lis * j / ping_len
 
         # beam_angle = 1.7 * pi / 180  # test parameters
-        beam_angle = 3000./400/40 * pi / 180  # parameters from sonar manul
+        # beam_angle = 3000./400/40 * pi / 180  # parameters from sonar manul
         w = 2*tan(beam_angle/2)*r  # half power beamwidth
         n = w/delta_s  # beamwidth in pixel
         return n
@@ -142,11 +143,17 @@ class Deconv(object):
             row = np.zeros(row_len)
             row[stbd_len:] = ping.stbd.pings
             row = row[::-1]
-            row[port_len:] = ping.port.pings
+            #row[port_len:] = ping.port.pings
             img.append(row)
 
         img = np.array(img)
-        self.vis_waterfall_img(img)
+        self.vis_waterfall_img(img, 'port')
+
+    def vis_waterfall_col(self, col):
+        plt.figure(0)
+        x = np.arange(len(col))
+        plt.plot(x, col)
+        plt.show()
 
     def kernel(self, kernel_len, beamwidth, mode):
         x = np.arange(0, kernel_len, 1)
@@ -154,12 +161,20 @@ class Deconv(object):
         if mode == 'gauss':
             var = (0.5*beamwidth)**2/(-2*log(0.5))
             y = np.exp(-x**2 / (2*var)) / (sqrt(var*2*pi))
+        if mode == 'gauss2':
+            var = (0.5*beamwidth)**2/(-2*log(0.5))
+            y = np.exp(-x**2 / (2*var)) / (sqrt(var*2*pi))**2
         if mode == 'flat':
             y = np.ones(kernel_len)
         if mode == 'sin':
             a = pi/(3*beamwidth)
             y = np.cos(a*x)
             y[y < 0] = 0
+        if mode == 'sin2':
+            a = pi/(3*beamwidth)
+            y = np.cos(a*x)
+            y[y < 0] = 0
+            y = y**2
         return (y/sum(y))
 
     def deconv_pinv_col(self, j, kernel_len, kernel_mood, side):
@@ -219,9 +234,9 @@ class Deconv(object):
         print("improvment = %f %%" % improve)
         self.vis_waterfall_img(ori_img, 'pinv_result')
 
-    def deconv_RL_col(self, j, kernel_len, kernel_mood, iteration, side):
+    def deconv_RL_col(self, j, kernel_len, kernel_mood, iteration, beam_angle, side):
 
-        beamwidth = self.gauss_para(j, side)
+        beamwidth = self.gauss_para(j, beam_angle, side)
 
         kernel_half = int((kernel_len-1)/2)
 
@@ -263,8 +278,8 @@ class Deconv(object):
 
         return s
 
-    def deconv_RL(self, kernel_len=5, kernel_mood='sin', iteration=10):
-        start, end = 8500, 9900
+    def deconv_RL(self, kernel_len=5, kernel_mood='sin2', iteration=5, beam_angle=3e-3):
+        start, end = self.port_len-4000, self.port_len-2500
         col = end - start
         ori_row = len(self.waterfall)
         test_row = len(self.waterfall) + kernel_len - 1
@@ -272,24 +287,51 @@ class Deconv(object):
         ori_img, test_img = np.zeros((ori_row, col)), np.zeros((test_row, col))
 
         for j in tqdm(range(start, end)):
-            ori_img[:, j-start] = self.waterfall[:, self.port_len+j]
-            test_img[:, j-start] = self.deconv_RL_col(j, kernel_len, kernel_mood, iteration, 'stbd')
+            ori_img[:, j-start] = self.waterfall[:, self.port_len-j-1]
+            test_img[:, j-start] = self.deconv_RL_col(j, kernel_len, kernel_mood, iteration, beam_angle, 'port')
         test_img = test_img[kernel_half:test_row-kernel_half]
         ori_sharp = self.eval_img_sharpness(ori_img)
         deconv_sharp = self.eval_img_sharpness(test_img)
         improve = (deconv_sharp - ori_sharp)/ori_sharp * 100
+        print("kernel:" + kernel_mood + ' iter:%d beam_angle:%f' % (iteration, beam_angle))
         print("ori_img sharpness = %e" % ori_sharp)
         print("deconv sharpenss = %e" % deconv_sharp)
         print("improvment = %f %%" % improve)
         self.vis_waterfall_img(test_img, 'pinv_result')
         # self.vis_waterfall_img(ori_img, 'ori_img')
+        # return improve, [beam_angle, kernel_mood, kernel_len, iteration]
+
+    def para_search(self):
+        beam_angle = [32e-4, 35e-4, 37e-4, 40e-4, 42e-4, 44e-4, 46e-4]  
+        kernel_lis = ['gauss', 'gauss2', 'sin', 'sin2']
+        kerenl_len_lis = [3, 5, 7]
+        iter_lis = [3, 5, 7, 10]
+        imp = 0
+        for angle in beam_angle:
+            for kenel in kernel_lis:
+                for kerenl_len in kerenl_len_lis:
+                    for iter_num in iter_lis:
+                        temp, para = self.deconv_RL(beam_angle=angle, kernel_len=kerenl_len, kernel_mood=kenel, iteration=iter_num)
+                        if temp > imp:
+                            imp = temp
+                            best_para = para
+        print(imp, best_para)
 
 
 test = Deconv()
+# test.para_search()
+# (264.01465714935625, [0.0046, 'sin2', 7, 10])
+test.deconv_RL(beam_angle=46e-4, kernel_len=7, iteration=10)
+# test.vis_waterfall_col(test.waterfall[:, 3400])
 # test.vis_waterfall_img(test.waterfall, 'test')
-test.deconv_pinv()
-# test.deconv_column_pinv(9900, 5, 'port')
-# test.deconv_RL_col(9000, 3, 3, 'port')
-# test.deconv_RL()
+# test.make_waterfall_image2()
+
+# j = 14212 - 3400
+# ori = test.waterfall[:, test.port_len-j-1]
+# test.vis_waterfall_col(ori)
+# test.eval_sharpness(ori)
+# deconv = test.deconv_RL_col(j, 3, 'sin2', 5, 'port')
+# test.vis_waterfall_col(deconv)
+# test.eval_sharpness(deconv)
 
 print("Orz")
